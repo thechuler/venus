@@ -1,0 +1,24 @@
+{
+  "name": "venus-bot",
+  "version": "1.0.0",
+  "description": "Bot de la rbk",
+  "main": "discord.js",
+  "scripts": {
+    "start": "node discord.js",
+    "dev": "nodemon discord.js"
+  },
+  "dependencies": {
+    "@google/genai": "^0.9.0",
+    "@google/generative-ai": "^0.24.0",
+    "@open-wa/wa-automate": "^4.76.0",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.5.0",
+    "mongodb": "^6.15.0",
+    "mongoose": "^8.13.2",
+    "nodemon": "^3.1.9"
+  },
+  "devDependencies": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
