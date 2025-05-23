@@ -1,27 +1,41 @@
-const { Client, Events, GatewayIntentBits } = require('discord.js');
-const { GoogleGenAI } = require ('@google/genai')
-const ai = new GoogleGenAI({	apiKey: process.env.GEMINI_API_KEY, });
-const {connectDB,Relacion,BuscarInfoDePersonaDB} = require ("./BD")
-const GenerarRespuesta = require("./AI");
-const dotenv = require( 'dotenv');
+import { Client, Events, GatewayIntentBits} from 'discord.js';
+import { connectDB, } from './BD.js';
+import dotenv from 'dotenv';
+import { GuardarMensaje, LeerMensajes } from './Utilidades.js';
+import { AnalizarIntencion, esRespuestaDirecta, GenerarResumen } from './Comportamiento/AI.js';
+import { guardarResumen } from './Comportamiento/resumenes.js';
+
+
 dotenv.config();
-const token = process.env.TOKEN_DISCORD ;
-let modocharla = false;    
+
+
+
+const token = process.env.TOKEN_DISCORD;
+
+let RBK = {
+  servidor: "",
+  Canal: {
+    Pruebas:"",
+    General:"",
+  },
+  Rol:{
+    Nuevos: ""
+  }
+}
+
+
 
 
 //-------------------Discord Intents-------------------------//
-const client = new Client({intents: [  GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,GatewayIntentBits.GuildMembers, ]});
-let canal;
-
-	
-	
-
-//------------------------------Evento inicio Bot--------------------------------/
-client.once(Events.ClientReady,async (readyClient) => {
-	console.log(`😊 Buenos dias shule.`);
-	console.log('✅ Me conecte con discord ');
-	connectDB()	
-	 canal = await client.channels.fetch("1362163042284077356")
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessageReactions, 
+    GatewayIntentBits.GuildVoiceStates,
+  ],
 });
 
 
@@ -29,45 +43,78 @@ client.once(Events.ClientReady,async (readyClient) => {
 
 
 
+
+
+//------------------------------Evento inicio Bot--------------------------------/
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`😊 Buenos dias shule.`);
+  console.log('✅ Me conecte con discord ');
+  
+
+  connectDB();
+  RBK.servidor = await client.guilds.fetch("465587665161420800")
+  RBK.Canal.Pruebas = await client.channels.fetch('1370992005940777141');
+  RBK.Canal.General  = await client.channels.fetch("489600496416456714");
+  RBK.Rol.Nuevos = await RBK.servidor.roles.cache.get("1279119860563050620")
+});
+
+
+
+
+
 //----------------------------Bienvenida-----------------------------//
-
-client.on(Events.GuildMemberAdd, async member => {
-	console.log("AAAAAAAAAA")
-	let respuesta = await GenerarRespuesta(`El usuario ${"<@" + member.user.id + ">"} ingreso al grupo, dale la bienvenida`)
-	canal.send(respuesta)
-   
-})
-
+client.on(Events.GuildMemberAdd, async (member) => {   
+});
 
 
 
 //-------------------------------Salida-------------------------------//
-client.on(Events.GuildMemberRemove, async member => {
-	let respuesta = await GenerarRespuesta(`El usuario ${member.user.username} salio del grupo, burlate de ello `)
-	canal.send(respuesta)
-})
-
-
- 
+client.on(Events.GuildMemberRemove, async (member) => {
+});
 
 
 
+
+
+
+//se podria agregar un cooldown para evitar a los mogolicos que hablan en partes. 
+let contador= 0;
 
 //------------------Evento Mensaje------------------------------//
-client.on(Events.MessageCreate, async mensaje => {
-	if (mensaje.author.bot) return;
+client.on(Events.MessageCreate, async (mensaje) => {
+  await GuardarMensaje(mensaje)
   
-	if (mensaje.content.toLowerCase().includes("venus")) {
-	  modocharla = true;
-	}
-  
-	if (puedeHablar(mensaje)) {
-	let respuesta = await GenerarRespuesta(await buscarMensajes(mensaje), mensaje);
+  console.log(contador)
+  if (mensaje.author.bot) return;
+  contador++
 
-	 if(respuesta != null) mensaje.channel.send(respuesta)
-	}
-  });
-  
+  if(contador >= 3){
+    
+    let resumen = await GenerarResumen(await LeerMensajes(10)) 
+    await guardarResumen(resumen.respuesta)
+   
+  }
+
+
+
+  if( (mensaje.channel == RBK.Canal.General || mensaje.channel == RBK.Canal.Pruebas)){
+
+
+    if (mensaje.mentions.has(client.user) || await esRespuestaDirecta(await LeerMensajes(10))) {
+         console.log("aa")
+          await AnalizarIntencion(await LeerMensajes(1))
+    }else{
+          console.log(false)
+        }
+
+
+
+    }
+
+    
+});
+
+
 
 
 
@@ -81,36 +128,6 @@ client.login(token);
 
 
 
-
-
-
-
-
-
-
-
-//-------------- Chequea si venus puede o no hablar ------------------------ //
-function puedeHablar(mensaje){
-	return modocharla && (mensaje.channel.id == "489600496416456714" || mensaje.channel.id == "1362163042284077356" )
-}
-
-
-
-
-
-
-//------------------Busca, filtra y procesa los ultimos mensajes para convertirlos en un prompt-------------------------//
-async function buscarMensajes(mensaje){
-	let mensajesRecientes = await mensaje.channel.messages.fetch({ limit: 10 });
-	let ultimosMensajes = mensajesRecientes.reverse().filter(m => m.content?.trim().length > 0).map(m => `${m.author.username}: ${m.content}`)
-    ultimosMensajes[ultimosMensajes.length-1] = "}. \n\n MENSAJE ACTUAL:" + ultimosMensajes[ultimosMensajes.length-1] 
-    let mensajeFinal = ultimosMensajes.join('\n');
-	//let recuerdosDePersona = await BuscarInfoDePersonaDB(mensaje)
-	//let historialYMensaje = "ESTOS SON LOS RECUERDOS QUE TIENES DE LA PERSONA ACTUAL USALOS SOLO SI ES NESCESARIO: " + recuerdosDePersona + "\n" + `HISTORIAL DEL CHAT. USALO UNICAMENTE COMO CONTEXTO DE LAS CONVERSACIONES {\n ${mensajeFinal}`;
-   
-	console.log(mensajeFinal)
-	return ("Historial de mensajes recientes, utilizar solamente de ser necesario { " + mensajeFinal)
-}
 
 
 
